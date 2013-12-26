@@ -74,15 +74,18 @@ our %long_opt = (
   'delete-delay' => 0,
   'delete-during' => 0,
   'delete-excluded' => 0,
+  'delete-missing-args' => 0,
   'existing' => 0,
   'fake-super' => 0,
   'files-from' => 3,
   'force' => 0,
   'from0' => 0,
   'fuzzy' => 0,
+  'groupmap' => 1,
   'iconv' => 1,
   'ignore-errors' => 0,
   'ignore-existing' => 0,
+  'ignore-missing-args' => 0,
   'inplace' => 0,
   'link-dest' => 2,
   'list-only' => 0,
@@ -114,6 +117,7 @@ our %long_opt = (
   'temp-dir' => 2,
   'timeout' => 1,
   'use-qsort' => 0,
+  'usermap' => 1,
 );
 
 ### END of options data produced by the cull_options script. ###

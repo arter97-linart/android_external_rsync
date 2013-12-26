@@ -3,7 +3,7 @@
  *
  * Copyright (C) Andrew Tridgell 1996
  * Copyright (C) Paul Mackerras 1996
- * Copyright (C) 2004-2009 Wayne Davison
+ * Copyright (C) 2004-2013 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@ int inc_recurse = 0;
 int compat_flags = 0;
 int use_safe_inc_flist = 0;
 
-extern int verbose;
 extern int am_server;
 extern int am_sender;
 extern int local_server;
@@ -35,6 +34,7 @@ extern int inplace;
 extern int recurse;
 extern int use_qsort;
 extern int allow_inc_recurse;
+extern int preallocate_files;
 extern int append_mode;
 extern int fuzzy_basis;
 extern int read_batch;
@@ -55,7 +55,7 @@ extern char *partial_dir;
 extern char *dest_option;
 extern char *files_from;
 extern char *filesfrom_host;
-extern struct filter_list_struct filter_list;
+extern filter_rule_list filter_list;
 extern int need_unsorted_flist;
 #ifdef ICONV_OPTION
 extern iconv_t ic_send, ic_recv;
@@ -163,7 +163,7 @@ void setup_protocol(int f_out,int f_in)
 		exit_cleanup(RERR_PROTOCOL);
 	}
 
-	if (verbose > 3) {
+	if (DEBUG_GTE(PROTO, 1)) {
 		rprintf(FINFO, "(%s) Protocol versions: remote=%d, negotiated=%d\n",
 			am_server? "Server" : "Client", remote_protocol, protocol_version);
 	}
@@ -189,6 +189,14 @@ void setup_protocol(int f_out,int f_in)
 	}
 	if (read_batch)
 		check_batch_flags();
+
+#ifndef SUPPORT_PREALLOCATION
+	if (preallocate_files && !am_sender) {
+		rprintf(FERROR, "preallocation is not supported on this %s\n",
+			am_server ? "Server" : "Client");
+		exit_cleanup(RERR_SYNTAX);
+	}
+#endif
 
 	if (protocol_version < 30) {
 		if (append_mode == 1)
@@ -251,7 +259,7 @@ void setup_protocol(int f_out,int f_in)
 	} else if (protocol_version >= 30) {
 		if (am_server) {
 			compat_flags = allow_inc_recurse ? CF_INC_RECURSE : 0;
-#if defined HAVE_LUTIMES && defined HAVE_UTIMES
+#ifdef CAN_SET_SYMLINK_TIMES
 			compat_flags |= CF_SYMLINK_TIMES;
 #endif
 #ifdef ICONV_OPTION
@@ -269,7 +277,7 @@ void setup_protocol(int f_out,int f_in)
 			    ? strchr(client_info, 'L') != NULL
 			    : !!(compat_flags & CF_SYMLINK_TIMES);
 		}
-#if defined HAVE_LUTIMES && defined HAVE_UTIMES
+#ifdef CAN_SET_SYMLINK_TIMES
 		else
 			receiver_symlink_times = 1;
 #endif
@@ -285,9 +293,9 @@ void setup_protocol(int f_out,int f_in)
 			    read_batch ? "batch file" : "connection");
 			exit_cleanup(RERR_SYNTAX);
 		}
-		use_safe_inc_flist = !!(compat_flags & CF_SAFE_FLIST);
+		use_safe_inc_flist = (compat_flags & CF_SAFE_FLIST) || protocol_version >= 31;
 		need_messages_from_generator = 1;
-#if defined HAVE_LUTIMES && defined HAVE_UTIMES
+#ifdef CAN_SET_SYMLINK_TIMES
 	} else if (!am_sender) {
 		receiver_symlink_times = 1;
 #endif
@@ -297,10 +305,10 @@ void setup_protocol(int f_out,int f_in)
 		unsort_ndx = ++file_extra_cnt;
 
 	if (partial_dir && *partial_dir != '/' && (!am_server || local_server)) {
-		int flags = MATCHFLG_NO_PREFIXES | MATCHFLG_DIRECTORY;
+		int rflags = FILTRULE_NO_PREFIXES | FILTRULE_DIRECTORY;
 		if (!am_sender || protocol_version >= 30)
-			flags |= MATCHFLG_PERISHABLE;
-		parse_rule(&filter_list, partial_dir, flags, 0);
+			rflags |= FILTRULE_PERISHABLE;
+		parse_filter_str(&filter_list, partial_dir, rule_template(rflags), 0);
 	}
 
 

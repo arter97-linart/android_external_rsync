@@ -126,6 +126,150 @@ ssize_t sys_llistxattr(const char *path, char *list, size_t size)
 	return len;
 }
 
+#elif HAVE_SOLARIS_XATTRS
+
+static ssize_t read_xattr(int attrfd, void *buf, size_t buflen)
+{
+	STRUCT_STAT sb;
+	ssize_t ret;
+
+	if (fstat(attrfd, &sb) < 0)
+		ret = -1;
+	else if (sb.st_size > SSIZE_MAX) {
+		errno = ERANGE;
+		ret = -1;
+	} else if (buflen == 0)
+		ret = sb.st_size;
+	else if (sb.st_size > buflen) {
+		errno = ERANGE;
+		ret = -1;
+	} else {
+		size_t bufpos;
+		for (bufpos = 0; bufpos < sb.st_size; ) {
+			ssize_t cnt = read(attrfd, buf + bufpos, sb.st_size - bufpos);
+			if (cnt <= 0) {
+				if (cnt < 0 && errno == EINTR)
+					continue;
+				bufpos = -1;
+				break;
+			}
+			bufpos += cnt;
+		}
+		ret = bufpos;
+	}
+
+	close(attrfd);
+
+	return ret;
+}
+
+ssize_t sys_lgetxattr(const char *path, const char *name, void *value, size_t size)
+{
+	int attrfd;
+
+	if ((attrfd = attropen(path, name, O_RDONLY)) < 0) {
+		errno = ENOATTR;
+		return -1;
+	}
+
+	return read_xattr(attrfd, value, size);
+}
+
+ssize_t sys_fgetxattr(int filedes, const char *name, void *value, size_t size)
+{
+	int attrfd;
+
+	if ((attrfd = openat(filedes, name, O_RDONLY|O_XATTR, 0)) < 0) {
+		errno = ENOATTR;
+		return -1;
+	}
+
+	return read_xattr(attrfd, value, size);
+}
+
+int sys_lsetxattr(const char *path, const char *name, const void *value, size_t size)
+{
+	int attrfd;
+	size_t bufpos;
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+
+	if ((attrfd = attropen(path, name, O_CREAT|O_TRUNC|O_WRONLY, mode)) < 0)
+		return -1;
+
+	for (bufpos = 0; bufpos < size; ) {
+		ssize_t cnt = write(attrfd, value+bufpos, size);
+		if (cnt <= 0) {
+			if (cnt < 0 && errno == EINTR)
+				continue;
+			bufpos = -1;
+			break;
+		}
+		bufpos += cnt;
+	}
+
+	close(attrfd);
+
+	return bufpos > 0 ? 0 : -1;
+}
+
+int sys_lremovexattr(const char *path, const char *name)
+{
+	int attrdirfd;
+	int ret;
+
+	if ((attrdirfd = attropen(path, ".", O_RDONLY)) < 0)
+		return -1;
+
+	ret = unlinkat(attrdirfd, name, 0);
+
+	close(attrdirfd);
+
+	return ret;
+}
+
+ssize_t sys_llistxattr(const char *path, char *list, size_t size)
+{
+	int attrdirfd;
+	DIR *dirp;
+	struct dirent *dp;
+	ssize_t ret = 0;
+
+	if ((attrdirfd = attropen(path, ".", O_RDONLY)) < 0) {
+		errno = ENOTSUP;
+		return -1;
+	}
+
+	if ((dirp = fdopendir(attrdirfd)) == NULL) {
+		close(attrdirfd);
+		return -1;
+	}
+
+	while ((dp = readdir(dirp))) {
+		int len = strlen(dp->d_name);
+
+		if (dp->d_name[0] == '.' && (len == 1 || (len == 2 && dp->d_name[1] == '.')))
+			continue;
+		if (len == 11 && dp->d_name[0] == 'S' && strncmp(dp->d_name, "SUNWattr_r", 10) == 0
+		 && (dp->d_name[10] == 'o' || dp->d_name[10] == 'w'))
+			continue;
+
+		if ((ret += len+1) > size) {
+			if (size == 0)
+				continue;
+			ret = -1;
+			errno = ERANGE;
+			break;
+		}
+		memcpy(list, dp->d_name, len+1);
+		list += len+1;
+	}
+
+	closedir(dirp);
+	close(attrdirfd);
+
+	return ret;
+}
+
 #else
 
 #error You need to create xattr compatibility functions.
