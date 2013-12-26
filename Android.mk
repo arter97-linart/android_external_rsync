@@ -11,12 +11,14 @@ LOCAL_SRC_FILES := \
 	sender.c \
 	exclude.c \
 	util.c \
+	util2.c \
 	main.c \
 	checksum.c \
 	match.c \
 	syscall.c \
 	log.c \
 	backup.c \
+	delete.c \
 	options.c \
 	io.c \
 	compat.c \
