@@ -1,5 +1,5 @@
 /* config.h.  Generated from config.h.in by configure.  */
-/* config.h.in.  Generated from configure.in by autoheader.  */
+/* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define if building universal (internal helper macro) */
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
@@ -13,7 +13,7 @@
 /* Define to 1 if chown modifies symlinks. */
 /* #undef CHOWN_MODIFIES_SYMLINK */
 
-/* Undefine if you don't want locale features. By default this is defined. */
+/* Undefine if you do not want locale features. By default this is defined. */
 /* #undef CONFIG_LOCALE */
 
 /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
@@ -62,6 +62,9 @@
 /* Define to 1 if you have the `asprintf' function. */
 #define HAVE_ASPRINTF 1
 
+/* Define to 1 if you have the `attropen' function. */
+/* #undef HAVE_ATTROPEN */
+
 /* Define to 1 if you have the <attr/xattr.h> header file. */
 /* #undef HAVE_ATTR_XATTR_H */
 
@@ -90,11 +93,18 @@
    */
 #define HAVE_DIRENT_H 1
 
+/* Define if posix_fallocate is efficient (Cygwin) */
+/* #undef HAVE_EFFICIENT_POSIX_FALLOCATE */
+
 /* Define to 1 if errno is declared in errno.h */
 #define HAVE_ERRNO_DECL 1
 
 /* Define to 1 if you have the `extattr_get_link' function. */
 /* #undef HAVE_EXTATTR_GET_LINK */
+
+/* Define to 1 if you have the fallocate function and it compiles and links
+   without error */
+/* #define HAVE_FALLOCATE */
 
 /* Define to 1 if you have the `fchmod' function. */
 #define HAVE_FCHMOD 1
@@ -126,8 +136,14 @@
 /* Define to 1 if you have the `geteuid' function. */
 #define HAVE_GETEUID 1
 
+/* Define to 1 if you have the `getgrouplist' function. */
+#define HAVE_GETGROUPLIST 1
+
 /* Define to 1 if you have the `getgroups' function. */
 #define HAVE_GETGROUPS 1
+
+/* Define to 1 if you have the `getpass' function. */
+#define HAVE_GETPASS 1
 
 /* Define to 1 if you have the `getpgrp' function. */
 #define HAVE_GETPGRP 1
@@ -158,6 +174,9 @@
 
 /* Define to 1 if you have the `inet_pton' function. */
 #define HAVE_INET_PTON 1
+
+/* Define to 1 if you have the `initgroups' function. */
+#define HAVE_INITGROUPS 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
@@ -201,11 +220,17 @@
 /* Define to 1 if you have the `socket' library (-lsocket). */
 /* #undef HAVE_LIBSOCKET */
 
+/* Define to 1 if you have the `z' library (-lz). */
+/* #undef HAVE_LIBZ */
+
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
 
 /* Define to 1 if you have the `link' function. */
 #define HAVE_LINK 1
+
+/* Define to 1 if you have the <linux/falloc.h> header file. */
+/* #undef HAVE_LINUX_FALLOC_H */
 
 /* True if you have Linux xattrs */
 /* #undef HAVE_LINUX_XATTRS */
@@ -267,6 +292,12 @@
 /* Define to 1 if you have the <netdb.h> header file. */
 #define HAVE_NETDB_H 1
 
+/* Define to 1 if you have the <netinet/in_systm.h> header file. */
+#define HAVE_NETINET_IN_SYSTM_H 1
+
+/* Define to 1 if you have the <netinet/ip.h> header file. */
+#define HAVE_NETINET_IP_H 1
+
 /* Define to 1 if you have the `nl_langinfo' function. */
 /* #undef HAVE_NL_LANGINFO */
 
@@ -293,6 +324,9 @@
 
 /* true if you have posix ACLs */
 /* #undef HAVE_POSIX_ACLS */
+
+/* Define to 1 if you have the `posix_fallocate' function. */
+/* #define HAVE_POSIX_FALLOCATE */
 
 /* Define to 1 if you have the `putenv' function. */
 #define HAVE_PUTENV 1
@@ -324,6 +358,9 @@
 /* Define to 1 if you have the `setsid' function. */
 #define HAVE_SETSID 1
 
+/* Define to 1 if you have the `setvbuf' function. */
+#define HAVE_SETVBUF 1
+
 /* Define to 1 if you have the `sigaction' function. */
 #define HAVE_SIGACTION 1
 
@@ -353,6 +390,9 @@
 
 /* true if you have solaris ACLs */
 /* #undef HAVE_SOLARIS_ACLS */
+
+/* True if you have Solaris xattrs */
+/* #undef HAVE_SOLARIS_XATTRS */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -402,7 +442,13 @@
 /* Define to 1 if the system has the type `struct stat64'. */
 #define HAVE_STRUCT_STAT64 1
 
-/* Define to 1 if `st_rdev' is member of `struct stat'. */
+/* Define to 1 if `st_mtimensec' is a member of `struct stat'. */
+/* #undef HAVE_STRUCT_STAT_ST_MTIMENSEC */
+
+/* Define to 1 if `st_mtim.tv_nsec' is a member of `struct stat'. */
+/* #undef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC */
+
+/* Define to 1 if `st_rdev' is a member of `struct stat'. */
 #define HAVE_STRUCT_STAT_ST_RDEV 1
 
 /* Define to 1 if you have the "struct utimbuf" type */
@@ -420,6 +466,9 @@
 
 /* Define to 1 if you have the <sys/extattr.h> header file. */
 /* #undef HAVE_SYS_EXTATTR_H */
+
+/* Define to 1 if you have the SYS_fallocate syscall number */
+/* #undef HAVE_SYS_FALLOCATE */
 
 /* Define to 1 if you have the <sys/fcntl.h> header file. */
 /* #undef HAVE_SYS_FCNTL_H */
@@ -482,6 +531,9 @@
 /* Define to 1 if you have the `utime' function. */
 #define HAVE_UTIME 1
 
+/* Define to 1 if you have the `utimensat' function. */
+#define HAVE_UTIMENSAT 1
+
 /* Define to 1 if you have the `utimes' function. */
 #define HAVE_UTIMES 1
 
@@ -505,6 +557,9 @@
 
 /* Define to 1 if you have the `waitpid' function. */
 #define HAVE_WAITPID 1
+
+/* Define to 1 if you have the <zlib.h> header file. */
+#define HAVE_ZLIB_H 1
 
 /* Define to 1 if you have the `_acl' function. */
 /* #undef HAVE__ACL */
@@ -554,6 +609,18 @@
 /* unprivileged user--e.g. nobody */
 #define NOBODY_USER "nobody"
 
+/* True if device files do not support xattrs */
+/* #undef NO_DEVICE_XATTRS */
+
+/* True if special files do not support xattrs */
+/* #undef NO_SPECIAL_XATTRS */
+
+/* True if symlinks do not support user xattrs */
+#define NO_SYMLINK_USER_XATTRS 1
+
+/* True if symlinks do not support xattrs */
+/* #undef NO_SYMLINK_XATTRS */
+
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT ""
 
@@ -565,6 +632,9 @@
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME ""
+
+/* Define to the home page for this package. */
+#define PACKAGE_URL ""
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION ""
@@ -581,8 +651,11 @@
 /* default -e command */
 #define RSYNC_RSH "ssh"
 
+/* Define to 1 if --protected-args should be the default */
+/* #undef RSYNC_USE_PROTECTED_ARGS */
+
 /* rsync release version */
-#define RSYNC_VERSION "3.0.7"
+#define RSYNC_VERSION "3.1.0"
 
 /* Define to 1 if sockets need to be shutdown */
 /* #undef SHUTDOWN_ALL_SOCKETS */
@@ -681,6 +754,9 @@
 #ifndef __cplusplus
 /* #undef inline */
 #endif
+
+/* Define to `unsigned int' if <sys/types.h> does not define. */
+/* #undef size_t */
 
 /* type to use in place of socklen_t if not defined */
 /* #undef socklen_t */
