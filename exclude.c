@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2001 Andrew Tridgell <tridge@samba.org>
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2002 Martin Pool
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -356,7 +356,7 @@ static char *parse_merge_name(const char *merge_file, unsigned int *len_ptr,
 		fn_len = clean_fname(fn, CFN_COLLAPSE_DOT_DOT_DIRS);
 	}
 
-	/* If the name isn't in buf yet, it's wasn't absolute. */
+	/* If the name isn't in buf yet, it wasn't absolute. */
 	if (fn != buf) {
 		int d_len = dirbuf_len - prefix_skip;
 		if (d_len + fn_len >= MAXPATHLEN) {

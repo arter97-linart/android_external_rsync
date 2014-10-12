@@ -3,7 +3,7 @@
  *
  * Copyright (C) Andrew Tridgell 1996
  * Copyright (C) Paul Mackerras 1996
- * Copyright (C) 2004-2013 Wayne Davison
+ * Copyright (C) 2004-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ int file_extra_cnt = 0; /* count of file-list extras that everyone gets */
 int inc_recurse = 0;
 int compat_flags = 0;
 int use_safe_inc_flist = 0;
+int want_xattr_optim = 0;
 
 extern int am_server;
 extern int am_sender;
@@ -76,6 +77,7 @@ int filesfrom_convert = 0;
 #define CF_SYMLINK_TIMES (1<<1)
 #define CF_SYMLINK_ICONV (1<<2)
 #define CF_SAFE_FLIST	 (1<<3)
+#define CF_AVOID_XATTR_OPTIM (1<<4)
 
 static const char *client_info;
 
@@ -267,11 +269,14 @@ void setup_protocol(int f_out,int f_in)
 #endif
 			if (local_server || strchr(client_info, 'f') != NULL)
 				compat_flags |= CF_SAFE_FLIST;
+			if (local_server || strchr(client_info, 'x') != NULL)
+				compat_flags |= CF_AVOID_XATTR_OPTIM;
 			write_byte(f_out, compat_flags);
 		} else
 			compat_flags = read_byte(f_in);
 		/* The inc_recurse var MUST be set to 0 or 1. */
 		inc_recurse = compat_flags & CF_INC_RECURSE ? 1 : 0;
+		want_xattr_optim = protocol_version >= 31 && !(compat_flags & CF_AVOID_XATTR_OPTIM);
 		if (am_sender) {
 			receiver_symlink_times = am_server
 			    ? strchr(client_info, 'L') != NULL

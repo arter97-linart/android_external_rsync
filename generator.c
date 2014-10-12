@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,6 +57,7 @@ extern int update_only;
 extern int human_readable;
 extern int ignore_existing;
 extern int ignore_non_existing;
+extern int want_xattr_optim;
 extern int inplace;
 extern int append_mode;
 extern int make_backups;
@@ -356,6 +357,9 @@ static void do_delete_pass(void)
 	for (j = 0; j < cur_flist->used; j++) {
 		struct file_struct *file = cur_flist->sorted[j];
 
+		if (!F_IS_ACTIVE(file))
+			continue;
+
 		f_name(file, fbuf);
 
 		if (!(file->flags & FLAG_CONTENT_DIR)) {
@@ -551,7 +555,7 @@ void itemize(const char *fnamecmp, struct file_struct *file, int ndx, int statre
 			if (preserve_xattrs && do_xfers
 			 && iflags & (ITEM_REPORT_XATTR|ITEM_TRANSFER)) {
 				int fd = iflags & ITEM_REPORT_XATTR
-				      && (protocol_version < 31 || !BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE))
+				      && !(want_xattr_optim && BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE))
 				       ? sock_f_out : -1;
 				send_xattr_request(NULL, file, fd);
 			}
@@ -574,7 +578,7 @@ int unchanged_file(char *fn, struct file_struct *file, STRUCT_STAT *st)
 	   of the file time to determine whether to sync */
 	if (always_checksum > 0 && S_ISREG(st->st_mode)) {
 		char sum[MAX_DIGEST_LEN];
-		file_checksum(fn, sum, st->st_size);
+		file_checksum(fn, st, sum);
 		return memcmp(sum, F_SUM(file), checksum_len) == 0;
 	}
 
@@ -755,6 +759,9 @@ static struct file_struct *find_fuzzy(struct file_struct *file, struct file_list
 		for (j = 0; j < dirlist->used; j++) {
 			struct file_struct *fp = dirlist->files[j];
 
+			if (!F_IS_ACTIVE(fp))
+				continue;
+
 			if (!S_ISREG(fp->mode) || !F_LENGTH(fp) || fp->flags & FLAG_FILE_SENT)
 				continue;
 
@@ -779,6 +786,9 @@ static struct file_struct *find_fuzzy(struct file_struct *file, struct file_list
 			const char *suf, *name;
 			int len, suf_len;
 			uint32 dist;
+
+			if (!F_IS_ACTIVE(fp))
+				continue;
 
 			if (!S_ISREG(fp->mode) || !F_LENGTH(fp) || fp->flags & FLAG_FILE_SENT)
 				continue;
@@ -1346,6 +1356,8 @@ static void recv_generator(char *fname, struct file_struct *file, int ndx,
 		} else
 			added_perms = 0;
 		if (is_dir < 0) {
+			if (!(preserve_times & PRESERVE_DIR_TIMES))
+				return;
 			/* In inc_recurse mode we want to make sure any missing
 			 * directories get created while we're still processing
 			 * the parent dir (which allows us to touch the parent
@@ -1499,7 +1511,7 @@ static void recv_generator(char *fname, struct file_struct *file, int ndx,
 				set_file_attrs(fname, file, &sx, NULL, maybe_ATTRS_REPORT);
 				if (itemizing)
 					itemize(fname, file, ndx, 0, &sx, 0, 0, NULL);
-#if defined SUPPORT_HARD_LINKS && defined CAN_HARDLINK_SYMLINK
+#ifdef SUPPORT_HARD_LINKS
 				if (preserve_hard_links && F_IS_HLINKED(file))
 					finish_hard_link(file, fname, ndx, &sx.st, itemizing, code, -1);
 #endif
@@ -1520,15 +1532,17 @@ static void recv_generator(char *fname, struct file_struct *file, int ndx,
 					goto cleanup;
 				itemizing = 0;
 				code = FNONE;
-			} else if (j >= 0)
+			} else if (j >= 0) {
 				statret = 1;
+				fnamecmp = fnamecmpbuf;
+			}
 		}
-		if (atomic_create(file, fname, sl, MAKEDEV(0, 0), &sx, statret == 0 ? DEL_FOR_SYMLINK : 0)) {
+		if (atomic_create(file, fname, sl, NULL, MAKEDEV(0, 0), &sx, statret == 0 ? DEL_FOR_SYMLINK : 0)) {
 			set_file_attrs(fname, file, NULL, NULL, 0);
 			if (itemizing) {
 				if (statret == 0 && !S_ISLNK(sx.st.st_mode))
 					statret = -1;
-				itemize(fname, file, ndx, statret, &sx,
+				itemize(fnamecmp, file, ndx, statret, &sx,
 					ITEM_LOCAL_CHANGE|ITEM_REPORT_CHANGE, 0, NULL);
 			}
 			if (code != FNONE && INFO_GTE(NAME, 1))
@@ -1594,18 +1608,20 @@ static void recv_generator(char *fname, struct file_struct *file, int ndx,
 					goto cleanup;
 				itemizing = 0;
 				code = FNONE;
-			} else if (j >= 0)
+			} else if (j >= 0) {
 				statret = 1;
+				fnamecmp = fnamecmpbuf;
+			}
 		}
 		if (DEBUG_GTE(GENR, 1)) {
 			rprintf(FINFO, "mknod(%s, 0%o, [%ld,%ld])\n",
 				fname, (int)file->mode,
 				(long)major(rdev), (long)minor(rdev));
 		}
-		if (atomic_create(file, fname, NULL, rdev, &sx, del_for_flag)) {
+		if (atomic_create(file, fname, NULL, NULL, rdev, &sx, del_for_flag)) {
 			set_file_attrs(fname, file, NULL, NULL, 0);
 			if (itemizing) {
-				itemize(fname, file, ndx, statret, &sx,
+				itemize(fnamecmp, file, ndx, statret, &sx,
 					ITEM_LOCAL_CHANGE|ITEM_REPORT_CHANGE, 0, NULL);
 			}
 			if (code != FNONE && INFO_GTE(NAME, 1))
@@ -1907,11 +1923,11 @@ static void recv_generator(char *fname, struct file_struct *file, int ndx,
 }
 
 /* If we are replacing an existing hard link, symlink, device, or special file,
- * create a temp-name item and rename it into place.  Only a symlink or hard
- * link puts a non-NULL value into the lnk arg.  Only a device puts a non-0
- * value into the rdev arg.  Specify 0 for the del_for_flag if there is not a
- * file to replace.  This returns 1 on success and 0 on failure. */
-int atomic_create(struct file_struct *file, char *fname, const char *lnk,
+ * create a temp-name item and rename it into place.  A symlimk specifies slnk,
+ * a hard link specifies hlnk, otherwise we create a device based on rdev.
+ * Specify 0 for the del_for_flag if there is not a file to replace.  This
+ * returns 1 on success and 0 on failure. */
+int atomic_create(struct file_struct *file, char *fname, const char *slnk, const char *hlnk,
 		  dev_t rdev, stat_x *sxp, int del_for_flag)
 {
 	char tmpname[MAXPATHLEN];
@@ -1936,23 +1952,22 @@ int atomic_create(struct file_struct *file, char *fname, const char *lnk,
 
 	create_name = skip_atomic ? fname : tmpname;
 
-	if (lnk) {
+	if (slnk) {
 #ifdef SUPPORT_LINKS
-		if (S_ISLNK(file->mode)
-#ifdef SUPPORT_HARD_LINKS /* The first symlink in a hard-linked cluster is always created. */
-		 && (!F_IS_HLINKED(file) || file->flags & FLAG_HLINK_FIRST)
-#endif
-		 ) {
-			if (do_symlink(lnk, create_name) < 0) {
-				rsyserr(FERROR_XFER, errno, "symlink %s -> \"%s\" failed",
-					full_fname(create_name), lnk);
-				return 0;
-			}
-		} else
-#endif
-#ifdef SUPPORT_HARD_LINKS
-		if (!hard_link_one(file, create_name, lnk, 0))
+		if (do_symlink(slnk, create_name) < 0) {
+			rsyserr(FERROR_XFER, errno, "symlink %s -> \"%s\" failed",
+				full_fname(create_name), slnk);
 			return 0;
+		}
+#else
+		return 0;
+#endif
+	} else if (hlnk) {
+#ifdef SUPPORT_HARD_LINKS
+		if (!hard_link_one(file, create_name, hlnk, 0))
+			return 0;
+#else
+		return 0;
 #endif
 	} else {
 		if (do_mknod(create_name, file->mode, rdev) < 0) {
@@ -2014,6 +2029,8 @@ static void touch_up_dirs(struct file_list *flist, int ndx)
 	 * transfer and/or re-set any tweaked modified-time values. */
 	for (i = start; i <= end; i++, counter++) {
 		file = flist->files[i];
+		if (!F_IS_ACTIVE(file))
+			continue;
 		if (!S_ISDIR(file->mode)
 		 || (!implied_dirs && file->flags & FLAG_IMPLIED_DIR))
 			continue;
@@ -2024,8 +2041,7 @@ static void touch_up_dirs(struct file_list *flist, int ndx)
 		}
 		/* Be sure not to retouch permissions with --fake-super. */
 		fix_dir_perms = !am_root && !(file->mode & S_IWUSR);
-		if (!F_IS_ACTIVE(file) || file->flags & FLAG_MISSING_DIR
-		 || !(need_retouch_dir_times || fix_dir_perms))
+		if (file->flags & FLAG_MISSING_DIR || !(need_retouch_dir_times || fix_dir_perms))
 			continue;
 		fname = f_name(file, NULL);
 		if (fix_dir_perms)

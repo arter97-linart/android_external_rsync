@@ -1,5 +1,5 @@
 mailto(rsync-bugs@samba.org)
-manpage(rsync)(1)(28 Sep 2013)()()
+manpage(rsync)(1)(22 Jun 2014)()()
 manpagename(rsync)(a fast, versatile, remote (and local) file-copying tool)
 manpagesynopsis()
 
@@ -103,7 +103,10 @@ This would transfer all files matching the pattern *.c from the
 current directory to the directory src on the machine foo. If any of
 the files already exist on the remote system then the rsync
 remote-update protocol is used to update the file by sending only the
-differences. See the tech report for details.
+differences in the data.  Note that the expansion of wildcards on the
+commandline (*.c) into a list of files is handled by the shell before
+it runs rsync and not by rsync itself (exactly the same as all other
+posix-style programs).
 
 quote(tt(rsync -avz foo:src/bar /data/tmp))
 
@@ -513,6 +516,12 @@ fine-grained settings override the implied settings of bf(-v).  Both
 bf(--info) and bf(--debug) have a way to ask for help that tells you
 exactly what flags are set for each increase in verbosity.
 
+However, do keep in mind that a daemon's "max verbosity" setting will limit how
+high of a level the various individual flags can be set on the daemon side.
+For instance, if the max is 2, then any info and/or debug flag that is set to
+a higher value than what would be set by bf(-vv) will be downgraded to the
+bf(-vv) level in the daemon's logging.
+
 dit(bf(--info=FLAGS))
 This option lets you have fine-grained control over the
 information
@@ -534,6 +543,7 @@ information on what is output and when.
 This option was added to 3.1.0, so an older rsync on the server side might
 reject your attempts at fine-grained control (if one or more flags needed
 to be send to the server and the server was too old to understand them).
+See also the "max verbosity" caveat above when dealing with a daemon.
 
 dit(bf(--debug=FLAGS))
 This option lets you have fine-grained control over the debug
@@ -554,6 +564,7 @@ specified, especially those pertaining to I/O and buffer debugging.
 This option was added to 3.1.0, so an older rsync on the server side might
 reject your attempts at fine-grained control (if one or more flags needed
 to be send to the server and the server was too old to understand them).
+See also the "max verbosity" caveat above when dealing with a daemon.
 
 dit(bf(--msgs2stderr)) This option changes rsync to send all its output
 directly to stderr rather than to send messages to the client side via the
@@ -789,7 +800,7 @@ the destination and have a modified time that is newer than the source
 file.  (If an existing destination file has a modification time equal to the
 source file's, it will be updated if the sizes are different.)
 
-Note that this does not affect the copying of symlinks or other special
+Note that this does not affect the copying of dirs, symlinks, or other special
 files.  Also, a difference of file format between the sender and receiver
 is always considered to be important enough for an update, no matter what
 date is on the objects.  In other words, if the source has a directory
@@ -1166,6 +1177,17 @@ dit(bf(-O, --omit-dir-times)) This tells rsync to omit directories when
 it is preserving modification times (see bf(--times)).  If NFS is sharing
 the directories on the receiving side, it is a good idea to use bf(-O).
 This option is inferred if you use bf(--backup) without bf(--backup-dir).
+
+This option also has the side-effect of avoiding early creation of directories
+in incremental recursion copies.  The default bf(--inc-recursive) copying
+normally does an early-create pass of all the sub-directories in a parent
+directory in order for it to be able to then set the modify time of the parent
+directory right away (without having to delay that until a bunch of recursive
+copying has finished).  This early-create idiom is not necessary if directory
+modify times are not being preserved, so it is skipped.  Since early-create
+directories don't have accurate mode, mtime, or ownership, the use of this
+option can help when someone wants to avoid these partially-finished
+directories.
 
 dit(bf(-J, --omit-link-times)) This tells rsync to omit symlinks when
 it is preserving modification times (see bf(--times)).
@@ -1726,6 +1748,9 @@ dit(bf(-T, --temp-dir=DIR)) This option instructs rsync to use DIR as a
 scratch directory when creating temporary copies of the files transferred
 on the receiving side.  The default behavior is to create each temporary
 file in the same directory as the associated destination file.
+Beginning with rsync 3.1.1, the temp-file names inside the specified DIR will
+not be prefixed with an extra dot (though they will still have a random suffix
+added).
 
 This option is most often used when the receiving disk partition does not
 have enough free space to hold a copy of the largest file in the transfer.
@@ -1856,7 +1881,20 @@ being transmitted -- something that is useful over a slow connection.
 Note that this option typically achieves better compression ratios than can
 be achieved by using a compressing remote shell or a compressing transport
 because it takes advantage of the implicit information in the matching data
-blocks that are not explicitly sent over the connection.
+blocks that are not explicitly sent over the connection.  This matching-data
+compression comes at a cost of CPU, though, and can be disabled by repeating
+the bf(-z) option, but only if both sides are at least version 3.1.1.
+
+Note that if your version of rsync was compiled with an external zlib (instead
+of the zlib that comes packaged with rsync) then it will not support the
+old-style compression, only the new-style (repeated-option) compression.  In
+the future this new-style compression will likely become the default.
+
+The client rsync requests new-style compression on the server via the
+bf(--new-compress) option, so if you see that option rejected it means that
+the server is not new enough to support bf(-zz).  Rsync also accepts the
+bf(--old-compress) option for a future time when new-style compression
+becomes the default.
 
 See the bf(--skip-compress) option for the default list of file suffixes
 that will not be compressed.
@@ -2743,6 +2781,10 @@ itemization(
   it() a '[' introduces a character class, such as [a-z] or [[:alpha:]].
   it() in a wildcard pattern, a backslash can be used to escape a wildcard
   character, but it is matched literally when no wildcards are present.
+  This means that there is an extra level of backslash removal when a
+  pattern contains wildcard characters compared to a pattern that has none.
+  e.g. if you add a wildcard to "foo\bar" (which matches the backslash) you
+  would need to use "foo\\bar*" to avoid the "\b" becoming just "b".
   it() if the pattern contains a / (not counting a trailing /) or a "**",
   then it is matched against the full pathname, including any leading
   directories. If the pattern doesn't contain a / or a "**", then it is
@@ -3361,7 +3403,7 @@ url(http://rsync.samba.org/)(http://rsync.samba.org/)
 
 manpagesection(VERSION)
 
-This man page is current for version 3.1.0 of rsync.
+This man page is current for version 3.1.1 of rsync.
 
 manpagesection(INTERNAL OPTIONS)
 

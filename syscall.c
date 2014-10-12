@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1998 Andrew Tridgell
  * Copyright (C) 2002 Martin Pool
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -147,13 +147,13 @@ int do_mknod(const char *pathname, mode_t mode, DEV_T dev)
 	if (S_ISSOCK(mode)) {
 		int sock;
 		struct sockaddr_un saddr;
+		unsigned int len = strlcpy(saddr.sun_path, pathname, sizeof saddr.sun_path);
+		if (len >= sizeof saddr.sun_path) {
+			errno = ENAMETOOLONG;
+			return -1;
+		}
 #ifdef HAVE_SOCKADDR_UN_LEN
-		unsigned int len =
-#endif
-		    strlcpy(saddr.sun_path, pathname, sizeof saddr.sun_path);
-#ifdef HAVE_SOCKADDR_UN_LEN
-		saddr.sun_len = len >= sizeof saddr.sun_path
-			      ? sizeof saddr.sun_path : len + 1;
+		saddr.sun_len = len + 1;
 #endif
 		saddr.sun_family = AF_UNIX;
 

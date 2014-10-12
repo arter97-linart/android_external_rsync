@@ -3,7 +3,7 @@
  * Written by Jay Fenlason, vaguely based on the ACLs patch.
  *
  * Copyright (C) 2004 Red Hat, Inc.
- * Copyright (C) 2006-2013 Wayne Davison
+ * Copyright (C) 2006-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -308,7 +308,8 @@ int get_xattr(const char *fname, stat_x *sxp)
 		if (!preserve_devices)
 #endif
 			return 0;
-	}
+	} else if (IS_MISSING_FILE(sxp->st))
+		return 0;
 
 	if (rsync_xal_get(fname, sxp->xattr) < 0) {
 		free_xattr(sxp);
@@ -451,7 +452,7 @@ int send_xattr(int f, stat_x *sxp)
 			if (rxa->datum_len > MAX_FULL_DATUM)
 				write_buf(f, rxa->datum + 1, MAX_DIGEST_LEN);
 			else
-				write_buf(f, rxa->datum, rxa->datum_len);
+				write_bigbuf(f, rxa->datum, rxa->datum_len);
 		}
 		ndx = rsync_xal_l.count; /* pre-incremented count */
 		rsync_xal_store(sxp->xattr); /* adds item to rsync_xal_l */
@@ -579,7 +580,7 @@ void send_xattr_request(const char *fname, struct file_struct *file, int f_out)
 			}
 
 			write_varint(f_out, len); /* length might have changed! */
-			write_buf(f_out, ptr, len);
+			write_bigbuf(f_out, ptr, len);
 			free(ptr);
 		}
 	}
@@ -610,9 +611,10 @@ int recv_xattr_request(struct file_struct *file, int f_in)
 	num = 0;
 	while ((rel_pos = read_varint(f_in)) != 0) {
 		num += rel_pos;
-		while (cnt && rxa->num < num) {
-		    rxa++;
-		    cnt--;
+		/* Note that the sender-related num values may not be in order on the receiver! */
+		while (cnt && (am_sender ? rxa->num < num : rxa->num != num)) {
+			rxa++;
+			cnt--;
 		}
 		if (!cnt || rxa->num != num) {
 			rprintf(FERROR, "[%s] could not find xattr #%d for %s\n",

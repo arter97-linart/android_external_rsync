@@ -4,7 +4,7 @@
  * Copyright (C) 1996 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2004-2013 Wayne Davison
+ * Copyright (C) 2004-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -231,7 +231,7 @@ static int maybe_hard_link(struct file_struct *file, int ndx,
 		}
 	}
 
-	if (atomic_create(file, fname, oldname, MAKEDEV(0, 0), sxp, statret == 0 ? DEL_FOR_FILE : 0)) {
+	if (atomic_create(file, fname, NULL, oldname, MAKEDEV(0, 0), sxp, statret == 0 ? DEL_FOR_FILE : 0)) {
 		if (itemizing) {
 			itemize(fname, file, ndx, statret, sxp,
 				ITEM_LOCAL_CHANGE | ITEM_XNAME_FOLLOWS, 0,

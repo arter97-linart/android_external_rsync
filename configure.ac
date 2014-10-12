@@ -3,9 +3,9 @@ dnl Process this file with autoconf to produce a configure script.
 AC_INIT()
 AC_CONFIG_SRCDIR([byteorder.h])
 AC_CONFIG_HEADER(config.h)
-AC_PREREQ(2.59)
+AC_PREREQ(2.60)
 
-RSYNC_VERSION=3.1.0
+RSYNC_VERSION=3.1.1
 AC_SUBST(RSYNC_VERSION)
 AC_MSG_NOTICE([Configuring rsync $RSYNC_VERSION])
 
@@ -705,6 +705,7 @@ AC_CACHE_CHECK([whether link() can hard-link symlinks],rsync_cv_can_hardlink_sym
     main() {
 	unlink(FILENAME);
 	if (symlink("conftest.no-such", FILENAME) < 0) abort();
+	unlink(FILENAME "2");
 	if (link(FILENAME, FILENAME "2") < 0) exit(1);
 	exit(0);
     }],
@@ -724,6 +725,7 @@ AC_CACHE_CHECK([whether link() can hard-link special files],rsync_cv_can_hardlin
     main() {
 	unlink(FILENAME);
 	if (mkfifo(FILENAME, 0777) < 0) abort();
+	unlink(FILENAME "2");
 	if (link(FILENAME, FILENAME "2") < 0) exit(1);
 	exit(0);
     }],
@@ -739,11 +741,7 @@ AC_TRY_RUN([
 
 main() {
        int fd[2];
-#ifdef __CYGWIN__
-       exit(1);
-#else
        exit((socketpair(AF_UNIX, SOCK_STREAM, 0, fd) != -1) ? 0 : 1);
-#endif
 }],
 rsync_cv_HAVE_SOCKETPAIR=yes,rsync_cv_HAVE_SOCKETPAIR=no,rsync_cv_HAVE_SOCKETPAIR=cross)])
 if test x"$rsync_cv_HAVE_SOCKETPAIR" = x"yes"; then
@@ -769,7 +767,7 @@ AC_MSG_CHECKING([whether to use included libpopt])
 if test x"$with_included_popt" = x"yes"; then
     AC_MSG_RESULT($srcdir/popt)
     BUILD_POPT='$(popt_OBJS)'
-    CFLAGS="$CFLAGS -I$srcdir/popt"
+    CFLAGS="-I$srcdir/popt $CFLAGS"
     if test x"$ALLOCA" != x
     then
 	# this can be removed when/if we add an included alloca.c;
@@ -794,8 +792,9 @@ AC_MSG_CHECKING([whether to use included zlib])
 if test x"$with_included_zlib" = x"yes"; then
     AC_MSG_RESULT($srcdir/zlib)
     BUILD_ZLIB='$(zlib_OBJS)'
-    CFLAGS="$CFLAGS -I$srcdir/zlib"
+    CFLAGS="-I$srcdir/zlib $CFLAGS"
 else
+    AC_DEFINE(EXTERNAL_ZLIB, 1, [Define to 1 if using external zlib])
     AC_MSG_RESULT(no)
 fi
 
@@ -1010,7 +1009,7 @@ else
     *)
 	AC_MSG_RESULT(running tests:)
 	AC_CHECK_LIB(acl,acl_get_file)
-	    AC_CACHE_CHECK([for ACL support],samba_cv_HAVE_POSIX_ACLS,[
+	AC_CACHE_CHECK([for ACL support],samba_cv_HAVE_POSIX_ACLS,[
 	    AC_TRY_LINK([#include <sys/types.h>
 #include <sys/acl.h>],
 [ acl_t acl; int entry_id; acl_entry_t *entry_p; return acl_get_entry( acl, entry_id, entry_p);],
@@ -1060,6 +1059,7 @@ else
 	AC_DEFINE(HAVE_LINUX_XATTRS, 1, [True if you have Linux xattrs])
 	AC_DEFINE(SUPPORT_XATTRS, 1)
 	AC_DEFINE(NO_SYMLINK_USER_XATTRS, 1, [True if symlinks do not support user xattrs])
+	AC_CHECK_LIB(attr,getxattr)
 	;;
     darwin*)
 	AC_MSG_RESULT(Using OS X xattrs)
@@ -1112,3 +1112,8 @@ AC_OUTPUT
 AC_MSG_RESULT()
 AC_MSG_RESULT([    rsync ${RSYNC_VERSION} configuration successful])
 AC_MSG_RESULT()
+if test x$HAVE_YODL2MAN != x1; then
+    AC_MSG_RESULT([    Note that yodl2man was not found, so pre-existing manpage files will be])
+    AC_MSG_RESULT([    used w/o change (if available) -- no .yo file changes will be used.])
+    AC_MSG_RESULT()
+fi

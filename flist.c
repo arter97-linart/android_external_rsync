@@ -4,7 +4,7 @@
  * Copyright (C) 1996 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2001, 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2002-2013 Wayne Davison
+ * Copyright (C) 2002-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -736,8 +736,11 @@ static struct file_struct *recv_file_entry(int f, struct file_list *flist, int x
 	}
 #endif
 
-	if (*thisname)
-		clean_fname(thisname, 0);
+	if (*thisname
+	 && (clean_fname(thisname, CFN_REFUSE_DOT_DOT_DIRS) < 0 || (!relative_paths && *thisname == '/'))) {
+		rprintf(FERROR, "ABORTING due to unsafe pathname from sender: %s\n", thisname);
+		exit_cleanup(RERR_PROTOCOL);
+	}
 
 	if (sanitize_paths)
 		sanitize_path(thisname, thisname, "", 0, SP_DEFAULT);
@@ -945,7 +948,14 @@ static struct file_struct *recv_file_entry(int f, struct file_list *flist, int x
 	memcpy(bp, basename, basename_len);
 
 #ifdef SUPPORT_HARD_LINKS
-	if (xflags & XMIT_HLINKED)
+	if (xflags & XMIT_HLINKED
+#ifndef CAN_HARDLINK_SYMLINK
+	 && !S_ISLNK(mode)
+#endif
+#ifndef CAN_HARDLINK_SPECIAL
+	 && !IS_SPECIAL(mode) && !IS_DEVICE(mode)
+#endif
+	)
 		file->flags |= FLAG_HLINKED;
 #endif
 	file->modtime = (time_t)modtime;
@@ -1156,7 +1166,7 @@ struct file_struct *make_file(const char *fname, struct file_list *flist,
 	if (sanitize_paths)
 		sanitize_path(thisname, thisname, "", 0, SP_DEFAULT);
 
-	if (stp && (S_ISDIR(stp->st_mode) || stp->st_mode == 0)) {
+	if (stp && (S_ISDIR(stp->st_mode) || IS_MISSING_FILE(*stp))) {
 		/* This is needed to handle a "symlink/." with a --relative
 		 * dir, or a request to delete a specific file. */
 		st = *stp;
@@ -1200,7 +1210,7 @@ struct file_struct *make_file(const char *fname, struct file_list *flist,
 				full_fname(thisname));
 		}
 		return NULL;
-	} else if (st.st_mode == 0) {
+	} else if (IS_MISSING_FILE(st)) {
 		io_error |= IOERR_GENERAL;
 		rprintf(FINFO, "skipping file with bogus (zero) st_mode: %s\n",
 			full_fname(thisname));
@@ -1303,7 +1313,7 @@ struct file_struct *make_file(const char *fname, struct file_list *flist,
 #endif
 
 	if (always_checksum && am_sender && S_ISREG(st.st_mode)) {
-		file_checksum(thisname, tmp_sum, st.st_size);
+		file_checksum(thisname, &st, tmp_sum);
 		if (sender_keeps_checksum)
 			extra_len += SUM_EXTRA_CNT * EXTRA_LEN;
 	}
@@ -2290,7 +2300,7 @@ struct file_list *send_file_list(int f, int argc, char *argv[])
 				} else
 					fn = p;
 				send_implied_dirs(f, flist, fbuf, fbuf, p, flags,
-						  st.st_mode == 0 ? MISSING_NAME : name_type);
+						  IS_MISSING_FILE(st) ? MISSING_NAME : name_type);
 				if (fn == p)
 					continue;
 			}
@@ -2553,6 +2563,9 @@ struct file_list *recv_file_list(int f)
 			rprintf(FINFO, "[%s] flist_eof=1\n", who_am_i());
 	}
 
+	/* The --relative option sends paths with a leading slash, so we need
+	 * to specify the strip_root option here.  We rejected leading slashes
+	 * for a non-relative transfer in recv_file_entry(). */
 	flist_sort_and_clean(flist, relative_paths);
 
 	if (protocol_version < 30) {

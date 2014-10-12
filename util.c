@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2001, 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "itypes.h"
 #include "inums.h"
 
+extern int dry_run;
 extern int module_id;
 extern int protect_args;
 extern int modify_window;
@@ -197,7 +198,15 @@ int make_path(char *fname, int flags)
 
 	/* Try to find an existing dir, starting from the deepest dir. */
 	for (p = end; ; ) {
-		if (do_mkdir(fname, ACCESSPERMS) == 0) {
+		if (dry_run) {
+			STRUCT_STAT st;
+			if (do_stat(fname, &st) == 0) {
+				if (S_ISDIR(st.st_mode))
+					errno = EEXIST;
+				else
+					errno = ENOTDIR;
+			}
+		} else if (do_mkdir(fname, ACCESSPERMS) == 0) {
 			ret++;
 			break;
 		}
@@ -208,12 +217,14 @@ int make_path(char *fname, int flags)
 		}
 		while (1) {
 			if (p == fname) {
-				ret = -ret - 1;
+				/* We got a relative path that doesn't exist, so assume that '.'
+				 * is there and just break out and create the whole thing. */
+				p = NULL;
 				goto double_break;
 			}
 			if (*--p == '/') {
 				if (p == fname) {
-					ret = -ret - 1; /* impossible... */
+					/* We reached the "/" dir, which we assume is there. */
 					goto double_break;
 				}
 				*p = '\0';
@@ -225,7 +236,10 @@ int make_path(char *fname, int flags)
 
 	/* Make all the dirs that we didn't find on the way here. */
 	while (p != end) {
-		*p = '/';
+		if (p)
+			*p = '/';
+		else
+			p = fname;
 		p += strlen(p);
 		if (ret < 0) /* Skip mkdir on error, but keep restoring the path. */
 			continue;
@@ -858,13 +872,15 @@ int count_dir_elements(const char *p)
  * CFN_KEEP_TRAILING_SLASH is flagged, and will also collapse ".." elements
  * (except at the start) if CFN_COLLAPSE_DOT_DOT_DIRS is flagged.  If the
  * resulting name would be empty, returns ".". */
-unsigned int clean_fname(char *name, int flags)
+int clean_fname(char *name, int flags)
 {
 	char *limit = name - 1, *t = name, *f = name;
 	int anchored;
 
 	if (!name)
 		return 0;
+
+#define DOT_IS_DOT_DOT_DIR(bp) (bp[1] == '.' && (bp[2] == '/' || !bp[2]))
 
 	if ((anchored = *f == '/') != 0) {
 		*t++ = *f++;
@@ -878,7 +894,8 @@ unsigned int clean_fname(char *name, int flags)
 	} else if (flags & CFN_KEEP_DOT_DIRS && *f == '.' && f[1] == '/') {
 		*t++ = *f++;
 		*t++ = *f++;
-	}
+	} else if (flags & CFN_REFUSE_DOT_DOT_DIRS && *f == '.' && DOT_IS_DOT_DOT_DIR(f))
+		return -1;
 	while (*f) {
 		/* discard extra slashes */
 		if (*f == '/') {
@@ -894,9 +911,10 @@ unsigned int clean_fname(char *name, int flags)
 			if (f[1] == '\0' && flags & CFN_DROP_TRAILING_DOT_DIR)
 				break;
 			/* collapse ".." dirs */
-			if (flags & CFN_COLLAPSE_DOT_DOT_DIRS
-			 && f[1] == '.' && (f[2] == '/' || !f[2])) {
+			if (flags & (CFN_COLLAPSE_DOT_DOT_DIRS|CFN_REFUSE_DOT_DOT_DIRS) && DOT_IS_DOT_DOT_DIR(f)) {
 				char *s = t - 1;
+				if (flags & CFN_REFUSE_DOT_DOT_DIRS)
+					return -1;
 				if (s == name && anchored) {
 					f += 2;
 					continue;
@@ -918,6 +936,8 @@ unsigned int clean_fname(char *name, int flags)
 	if (t == name)
 		*t++ = '.';
 	*t = '\0';
+
+#undef DOT_IS_DOT_DOT_DIR
 
 	return t - name;
 }
@@ -1305,15 +1325,16 @@ char *timestring(time_t t)
 int cmp_time(time_t file1, time_t file2)
 {
 	if (file2 > file1) {
-		if (file2 - file1 <= modify_window)
-			return 0;
-		return -1;
+		/* The final comparison makes sure that modify_window doesn't overflow a
+		 * time_t, which would mean that file2 must be in the equality window. */
+		if (!modify_window || (file2 > file1 + modify_window && file1 + modify_window > file1))
+			return -1;
+	} else if (file1 > file2) {
+		if (!modify_window || (file1 > file2 + modify_window && file2 + modify_window > file2))
+			return 1;
 	}
-	if (file1 - file2 <= modify_window)
-		return 0;
-	return 1;
+	return 0;
 }
-
 
 #ifdef __INSURE__XX
 #include <dlfcn.h>

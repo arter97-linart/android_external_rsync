@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -199,7 +199,7 @@ enum delret delete_item(char *fbuf, uint16 mode, uint16 flags)
 				fbuf);
 			ret = DR_NOT_EMPTY;
 		} else if (errno != ENOENT) {
-			rsyserr(FERROR, errno, "delete_file: %s(%s) failed",
+			rsyserr(FERROR_XFER, errno, "delete_file: %s(%s) failed",
 				what, fbuf);
 			ret = DR_FAILURE;
 		} else

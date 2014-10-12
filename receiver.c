@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996-2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ extern int inc_recurse;
 extern int log_before_transfer;
 extern int stdout_format_has_i;
 extern int logfile_format_has_i;
+extern int want_xattr_optim;
 extern int csum_length;
 extern int read_batch;
 extern int write_batch;
@@ -113,9 +114,12 @@ int get_tmpname(char *fnametmp, const char *fname, BOOL make_unique)
 		}
 	} else
 		f = fname;
-	if (*f == '.') /* avoid an extra leading dot for OS X's sake */
-		f++;
-	fnametmp[length++] = '.';
+
+	if (!tmpdir) { /* using a tmpdir avoids the leading dot on our temp names */
+		if (*f == '.') /* avoid an extra leading dot for OS X's sake */
+			f++;
+		fnametmp[length++] = '.';
+	}
 
 	/* The maxname value is bufsize, and includes space for the '\0'.
 	 * NAME_MAX needs an extra -1 for the name's leading dot. */
@@ -581,7 +585,7 @@ int recv_files(int f_in, int f_out, char *local_name)
 
 #ifdef SUPPORT_XATTRS
 		if (preserve_xattrs && iflags & ITEM_REPORT_XATTR && do_xfers
-		 && (protocol_version < 31 || !BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
+		 && !(want_xattr_optim && BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
 			recv_xattr_request(file, f_in);
 #endif
 

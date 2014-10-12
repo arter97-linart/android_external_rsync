@@ -2,7 +2,7 @@
  * Copyright (C) 1996, 2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2001, 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -208,6 +208,7 @@
 #define CFN_KEEP_TRAILING_SLASH (1<<1)
 #define CFN_DROP_TRAILING_DOT_DIR (1<<2)
 #define CFN_COLLAPSE_DOT_DOT_DIRS (1<<3)
+#define CFN_REFUSE_DOT_DOT_DIRS (1<<4)
 
 #define SP_DEFAULT 0
 #define SP_KEEP_DOT_DIRS (1<<0)
@@ -793,6 +794,8 @@ extern int xattrs_ndx;
 #define DIR_PARENT(a) (a)[0]
 #define DIR_FIRST_CHILD(a) (a)[1]
 #define DIR_NEXT_SIBLING(a) (a)[2]
+
+#define IS_MISSING_FILE(statbuf) ((statbuf).st_mode == 0)
 
 /*
  * Start the flist array at FLIST_START entries and grow it

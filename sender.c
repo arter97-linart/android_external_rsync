@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ extern int inc_recurse;
 extern int log_before_transfer;
 extern int stdout_format_has_i;
 extern int logfile_format_has_i;
+extern int want_xattr_optim;
 extern int csum_length;
 extern int append_mode;
 extern int io_error;
@@ -147,7 +148,7 @@ void successful_send(int ndx)
 	 || (NSEC_BUMP(file) && (uint32)st.ST_MTIME_NSEC != F_MOD_NSEC(file))
 #endif
 	) {
-		rprintf(FERROR, "ERROR: Skipping sender remove for changed file: %s\n", fname);
+		rprintf(FERROR_XFER, "ERROR: Skipping sender remove for changed file: %s\n", fname);
 		return;
 	}
 
@@ -157,7 +158,7 @@ void successful_send(int ndx)
 		if (errno == ENOENT)
 			rprintf(FINFO, "sender file already removed: %s\n", fname);
 		else
-			rsyserr(FERROR, errno, "sender failed to %s %s", failed_op, fname);
+			rsyserr(FERROR_XFER, errno, "sender failed to %s %s", failed_op, fname);
 	} else {
 		if (INFO_GTE(REMOVE, 1))
 			rprintf(FINFO, "sender removed %s\n", fname);
@@ -178,7 +179,7 @@ static void write_ndx_and_attrs(int f_out, int ndx, int iflags,
 		write_vstring(f_out, buf, len);
 #ifdef SUPPORT_XATTRS
 	if (preserve_xattrs && iflags & ITEM_REPORT_XATTR && do_xfers
-	 && (protocol_version < 31 || !BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
+	 && !(want_xattr_optim && BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
 		send_xattr_request(fname, file, f_out);
 #endif
 }
@@ -260,7 +261,7 @@ void send_files(int f_in, int f_out)
 
 #ifdef SUPPORT_XATTRS
 		if (preserve_xattrs && iflags & ITEM_REPORT_XATTR && do_xfers
-		 && (protocol_version < 31 || !BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
+		 && !(want_xattr_optim && BITS_SET(iflags, ITEM_XNAME_FOLLOWS|ITEM_LOCAL_CHANGE)))
 			recv_xattr_request(file, f_in);
 #endif
 

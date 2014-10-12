@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2001 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2001, 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -155,7 +155,7 @@ static void read_a_msg(void);
 static void drain_multiplex_messages(void);
 static void sleep_for_bwlimit(int bytes_written);
 
-static void check_timeout(BOOL allow_keepalive)
+static void check_timeout(BOOL allow_keepalive, int keepalive_flags)
 {
 	time_t t, chk;
 
@@ -177,7 +177,7 @@ static void check_timeout(BOOL allow_keepalive)
 
 	if (allow_keepalive) {
 		/* This may put data into iobuf.msg w/o flushing. */
-		maybe_send_keepalive(t, 0);
+		maybe_send_keepalive(t, keepalive_flags);
 	}
 
 	if (!last_io_in)
@@ -232,27 +232,9 @@ static NORETURN void whine_about_eof(BOOL allow_kluge)
  * the socket except very early in the transfer. */
 static size_t safe_read(int fd, char *buf, size_t len)
 {
-	size_t got;
-	int n;
+	size_t got = 0;
 
 	assert(fd != iobuf.in_fd);
-
-	n = read(fd, buf, len);
-	if ((size_t)n == len || n == 0) {
-		if (DEBUG_GTE(IO, 2))
-			rprintf(FINFO, "[%s] safe_read(%d)=%ld\n", who_am_i(), fd, (long)n);
-		return n;
-	}
-	if (n < 0) {
-		if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
-		  read_failed:
-			rsyserr(FERROR, errno, "safe_read failed to read %ld bytes [%s]",
-				(long)len, who_am_i());
-			exit_cleanup(RERR_STREAMIO);
-		}
-		got = 0;
-	} else
-		got = n;
 
 	while (1) {
 		struct timeval tv;
@@ -273,8 +255,7 @@ static size_t safe_read(int fd, char *buf, size_t len)
 					who_am_i());
 				exit_cleanup(RERR_FILEIO);
 			}
-			if (io_timeout)
-				maybe_send_keepalive(time(NULL), MSK_ALLOW_FLUSH);
+			check_timeout(1, MSK_ALLOW_FLUSH);
 			continue;
 		}
 
@@ -282,7 +263,7 @@ static size_t safe_read(int fd, char *buf, size_t len)
 			rprintf(FINFO, "select exception on fd %d\n", fd); */
 
 		if (FD_ISSET(fd, &r_fds)) {
-			n = read(fd, buf + got, len - got);
+			int n = read(fd, buf + got, len - got);
 			if (DEBUG_GTE(IO, 2))
 				rprintf(FINFO, "[%s] safe_read(%d)=%ld\n", who_am_i(), fd, (long)n);
 			if (n == 0)
@@ -290,7 +271,9 @@ static size_t safe_read(int fd, char *buf, size_t len)
 			if (n < 0) {
 				if (errno == EINTR)
 					continue;
-				goto read_failed;
+				rsyserr(FERROR, errno, "safe_read failed to read %ld bytes [%s]",
+					(long)len, who_am_i());
+				exit_cleanup(RERR_STREAMIO);
 			}
 			if ((got += (size_t)n) == len)
 				break;
@@ -768,7 +751,7 @@ static char *perform_io(size_t needed, int flags)
 				send_extra_file_list(sock_f_out, -1);
 				extra_flist_sending_enabled = !flist_eof;
 			} else
-				check_timeout((flags & PIO_NEED_INPUT) != 0);
+				check_timeout((flags & PIO_NEED_INPUT) != 0, 0);
 			FD_ZERO(&r_fds); /* Just in case... */
 			FD_ZERO(&w_fds);
 		}
@@ -1388,6 +1371,14 @@ void maybe_send_keepalive(time_t now, int flags)
 	if (flags & MSK_ACTIVE_RECEIVER)
 		last_io_in = now; /* Fudge things when we're working hard on the files. */
 
+	/* Early in the transfer (before the receiver forks) the receiving side doesn't
+	 * care if it hasn't sent data in a while as long as it is receiving data (in
+	 * fact, a pre-3.1.0 rsync would die if we tried to send it a keep alive during
+	 * this time).  So, if we're an early-receiving proc, just return and let the
+	 * incoming data determine if we timeout. */
+	if (!am_sender && !am_receiver && !am_generator)
+		return;
+
 	if (now - last_io_out >= allowed_lull) {
 		/* The receiver is special:  it only sends keep-alive messages if it is
 		 * actively receiving data.  Otherwise, it lets the generator timeout. */
@@ -1794,7 +1785,7 @@ int64 read_varlong(int f, uchar min_bytes)
 #if SIZEOF_INT64 < 8
 	u.x = IVAL(u.b,0);
 #elif CAREFUL_ALIGNMENT
-	u.x = IVAL(u.b,0) | (((int64)IVAL(u.b,4))<<32);
+	u.x = IVAL64(u.b,0);
 #endif
 	return u.x;
 }
@@ -2046,10 +2037,10 @@ void write_varlong(int f, int64 x, uchar min_bytes)
 	uchar bit;
 	int cnt = 8;
 
-	SIVAL(b, 1, x);
 #if SIZEOF_INT64 >= 8
-	SIVAL(b, 5, x >> 32);
+	SIVAL64(b, 1, x);
 #else
+	SIVAL(b, 1, x);
 	if (x <= 0x7FFFFFFF && x >= 0)
 		memset(b + 5, 0, 4);
 	else {
@@ -2094,6 +2085,19 @@ void write_longint(int f, int64 x)
 	SIVAL(s, 4, x >> 32);
 	write_buf(f, b, 12);
 #endif
+}
+
+void write_bigbuf(int f, const char *buf, size_t len)
+{
+	size_t half_max = (iobuf.out.size - iobuf.out_empty_len) / 2;
+
+	while (len > half_max + 1024) {
+		write_buf(f, buf, half_max);
+		buf += half_max;
+		len -= half_max;
+	}
+
+	write_buf(f, buf, len);
 }
 
 void write_buf(int f, const char *buf, size_t len)

@@ -4,7 +4,7 @@
  * Copyright (C) 1996-2000 Andrew Tridgell
  * Copyright (C) 1996 Paul Mackerras
  * Copyright (C) 2001, 2002 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -177,6 +177,11 @@ void show_progress(OFF_T ofs, OFF_T size)
 
 	gettimeofday(&now, NULL);
 
+	if (INFO_GTE(PROGRESS, 2)) {
+		ofs = stats.total_transferred_size - size + ofs;
+		size = stats.total_size;
+	}
+
 	if (!ph_start.time.tv_sec) {
 		int i;
 
@@ -212,9 +217,5 @@ void show_progress(OFF_T ofs, OFF_T size)
 		return;
 #endif
 
-	if (INFO_GTE(PROGRESS, 2)) {
-		rprint_progress(stats.total_transferred_size,
-				stats.total_size, &now, False);
-	} else
-		rprint_progress(ofs, size, &now, False);
+	rprint_progress(ofs, size, &now, False);
 }

@@ -22,7 +22,7 @@ void check_batch_flags(void);
 void write_batch_shell_file(int argc, char *argv[], int file_arg_cnt);
 uint32 get_checksum1(char *buf1, int32 len);
 void get_checksum2(char *buf, int32 len, char *sum);
-void file_checksum(char *fname, char *sum, OFF_T size);
+void file_checksum(const char *fname, const STRUCT_STAT *st_p, char *sum);
 void sum_init(int seed);
 void sum_update(const char *p, int32 len);
 int sum_end(char *sum);
@@ -106,7 +106,7 @@ void itemize(const char *fnamecmp, struct file_struct *file, int ndx, int statre
 	     stat_x *sxp, int32 iflags, uchar fnamecmp_type,
 	     const char *xname);
 int unchanged_file(char *fn, struct file_struct *file, STRUCT_STAT *st);
-int atomic_create(struct file_struct *file, char *fname, const char *lnk,
+int atomic_create(struct file_struct *file, char *fname, const char *slnk, const char *hlnk,
 		  dev_t rdev, stat_x *sxp, int del_for_flag);
 void check_for_finished_files(int itemizing, enum logcode code, int check_redo);
 void generate_files(int f_out, const char *local_name);
@@ -166,6 +166,7 @@ void write_int(int f, int32 x);
 void write_varint(int f, int32 x);
 void write_varlong(int f, int64 x, uchar min_bytes);
 void write_longint(int f, int64 x);
+void write_bigbuf(int f, const char *buf, size_t len);
 void write_buf(int f, const char *buf, size_t len);
 void write_sbuf(int f, const char *buf);
 void write_byte(int f, uchar c);
@@ -368,7 +369,7 @@ void strlower(char *s);
 size_t pathjoin(char *dest, size_t destsize, const char *p1, const char *p2);
 size_t stringjoin(char *dest, size_t destsize, ...);
 int count_dir_elements(const char *p);
-unsigned int clean_fname(char *name, int flags);
+int clean_fname(char *name, int flags);
 char *sanitize_path(char *dest, const char *p, const char *rootdir, int depth,
 		    int flags);
 int change_dir(const char *dir, int set_path_only);

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1998-2001 Andrew Tridgell <tridge@samba.org>
  * Copyright (C) 2000-2001 Martin Pool <mbp@samba.org>
- * Copyright (C) 2003-2013 Wayne Davison
+ * Copyright (C) 2003-2014 Wayne Davison
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -846,13 +846,13 @@ void log_delete(const char *fname, int mode)
 
 	x.file.mode = mode;
 
-	if (!INFO_GTE(DEL, 1) && !stdout_format)
-		;
-	else if (am_server && protocol_version >= 29 && len < MAXPATHLEN) {
+	if (am_server && protocol_version >= 29 && len < MAXPATHLEN) {
 		if (S_ISDIR(mode))
 			len++; /* directories include trailing null */
 		send_msg(MSG_DELETED, fname, len, am_generator);
-	} else {
+	} else if (!INFO_GTE(DEL, 1) && !stdout_format)
+		;
+	else {
 		fmt = stdout_format_has_o_or_i ? stdout_format : "deleting %n";
 		log_formatted(FCLIENT, fmt, "del.", &x.file, fname, ITEM_DELETED, NULL);
 	}
@@ -874,9 +874,9 @@ void log_exit(int code, const char *file, int line)
 {
 	if (code == 0) {
 		rprintf(FLOG,"sent %s bytes  received %s bytes  total size %s\n",
-			comma_num(stats.total_written),
-			comma_num(stats.total_read),
-			comma_num(stats.total_size));
+			big_num(stats.total_written),
+			big_num(stats.total_read),
+			big_num(stats.total_size));
 	} else if (am_server != 2) {
 		const char *name;
 
